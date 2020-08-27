@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 16-Aug-2020 at 23:31:02 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>JAVA_HOME</td>
+        <td>C:\Program Files\Java\jdk1.8.0_241</td></tr>
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.9.0", "pytest": "6.0.1"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.18362-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.10.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.2</td></tr></table>
+    <h2>Summary</h2>
+    <p>1 tests ran in 0.62 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">0 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">1 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_AdactinBooking.py::TestAdactinBooking::test_adactin</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Adactinpage.test_AdactinBooking.TestAdactinBooking object at 0x00000213BE48CA00&gt;<br/><br/>    def test_adactin(self):<br/>            b = BaseClass()<br/>&gt;           driver = b.launch_Browser()<br/><br/>test_AdactinBooking.py:14: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/>..\base\Base.py:6: in launch_Browser<br/>    self.driver = webdriver.Chrome(<br/>..\..\apitesting\venv\lib\site-packages\selenium\webdriver\chrome\webdriver.py:73: in __init__<br/>    self.service.start()<br/>..\..\apitesting\venv\lib\site-packages\selenium\webdriver\common\service.py:72: in start<br/>    self.process = subprocess.Popen(cmd, env=self.env,<br/>..\..\..\AppData\Local\Programs\Python\Python38\lib\subprocess.py:854: in __init__<br/>    self._execute_child(args, executable, preexec_fn, close_fds,<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;subprocess.Popen object at 0x00000213BE71E040&gt;, args = &#x27;C:\\Users\\ManoKutty\\PycharmProjects\\AdactinHotel\\Driver\\chromedriver.exe --port=51131&#x27;, executable = None<br/>preexec_fn = None, close_fds = False, pass_fds = (), cwd = None<br/>env = environ({&#x27;PYCHARM COMMUNITY EDITION&#x27;: &#x27;C:\\Program Files\\JetBrains\\PyCharm Community Edition 2020.2\\bin;&#x27;, &#x27;PROGRAM...W6432&#x27;: &#x27;C:\\Program Files&#x27;, &#x27;PYTEST_CURRENT_TEST&#x27;: &#x27;test_AdactinBooking.py::TestAdactinBooking::test_adactin (call)&#x27;})<br/>startupinfo = &lt;subprocess.STARTUPINFO object at 0x00000213BE71E0D0&gt;, creationflags = 0, shell = False, p2cread = Handle(804), p2cwrite = 6, c2pread = -1, c2pwrite = Handle(808), errread = -1<br/>errwrite = Handle(812), unused_restore_signals = True, unused_start_new_session = False<br/><br/>    def _execute_child(self, args, executable, preexec_fn, close_fds,<br/>                       pass_fds, cwd, env,<br/>                       startupinfo, creationflags, shell,<br/>                       p2cread, p2cwrite,<br/>                       c2pread, c2pwrite,<br/>                       errread, errwrite,<br/>                       unused_restore_signals, unused_start_new_session):<br/>        &quot;&quot;&quot;Execute program (MS Windows version)&quot;&quot;&quot;<br/>    <br/>        assert not pass_fds, &quot;pass_fds not supported on Windows.&quot;<br/>    <br/>        if isinstance(args, str):<br/>            pass<br/>        elif isinstance(args, bytes):<br/>            if shell:<br/>                raise TypeError(&#x27;bytes args is not allowed on Windows&#x27;)<br/>            args = list2cmdline([args])<br/>        elif isinstance(args, os.PathLike):<br/>            if shell:<br/>                raise TypeError(&#x27;path-like args is not allowed when &#x27;<br/>                                &#x27;shell is true&#x27;)<br/>            args = list2cmdline([args])<br/>        else:<br/>            args = list2cmdline(args)<br/>    <br/>        if executable is not None:<br/>            executable = os.fsdecode(executable)<br/>    <br/>        # Process startup details<br/>        if startupinfo is None:<br/>            startupinfo = STARTUPINFO()<br/>        else:<br/>            # bpo-34044: Copy STARTUPINFO since it is modified above,<br/>            # so the caller can reuse it multiple times.<br/>            startupinfo = startupinfo.copy()<br/>    <br/>        use_std_handles = -1 not in (p2cread, c2pwrite, errwrite)<br/>        if use_std_handles:<br/>            startupinfo.dwFlags |= _winapi.STARTF_USESTDHANDLES<br/>            startupinfo.hStdInput = p2cread<br/>            startupinfo.hStdOutput = c2pwrite<br/>            startupinfo.hStdError = errwrite<br/>    <br/>        attribute_list = startupinfo.lpAttributeList<br/>        have_handle_list = bool(attribute_list and<br/>                                &quot;handle_list&quot; in attribute_list and<br/>                                attribute_list[&quot;handle_list&quot;])<br/>    <br/>        # If we were given an handle_list or need to create one<br/>        if have_handle_list or (use_std_handles and close_fds):<br/>            if attribute_list is None:<br/>                attribute_list = startupinfo.lpAttributeList = {}<br/>            handle_list = attribute_list[&quot;handle_list&quot;] = \<br/>                list(attribute_list.get(&quot;handle_list&quot;, []))<br/>    <br/>            if use_std_handles:<br/>                handle_list += [int(p2cread), int(c2pwrite), int(errwrite)]<br/>    <br/>            handle_list[:] = self._filter_handle_list(handle_list)<br/>    <br/>            if handle_list:<br/>                if not close_fds:<br/>                    warnings.warn(&quot;startupinfo.lpAttributeList[&#x27;handle_list&#x27;] &quot;<br/>                                  &quot;overriding close_fds&quot;, RuntimeWarning)<br/>    <br/>                # When using the handle_list we always request to inherit<br/>                # handles but the only handles that will be inherited are<br/>                # the ones in the handle_list<br/>                close_fds = False<br/>    <br/>        if shell:<br/>            startupinfo.dwFlags |= _winapi.STARTF_USESHOWWINDOW<br/>            startupinfo.wShowWindow = _winapi.SW_HIDE<br/>            comspec = os.environ.get(&quot;COMSPEC&quot;, &quot;cmd.exe&quot;)<br/>            args = &#x27;{} /c &quot;{}&quot;&#x27;.format (comspec, args)<br/>    <br/>        if cwd is not None:<br/>            cwd = os.fsdecode(cwd)<br/>    <br/>        sys.audit(&quot;subprocess.Popen&quot;, executable, args, cwd, env)<br/>    <br/>        # Start the process<br/>        try:<br/>&gt;           hp, ht, pid, tid = _winapi.CreateProcess(executable, args,<br/>                                     # no special security<br/>                                     None, None,<br/>                                     int(not close_fds),<br/>                                     creationflags,<br/>                                     env,<br/>                                     cwd,<br/>                                     startupinfo)<br/><span class="error">E                                    OSError: [WinError 193] %1 is not a valid Win32 application</span><br/><br/>..\..\..\AppData\Local\Programs\Python\Python38\lib\subprocess.py:1307: OSError<br/></div></td></tr></tbody></table></body></html>
